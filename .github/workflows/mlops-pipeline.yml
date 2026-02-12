@@ -1,0 +1,49 @@
+name: mlops-pipeline
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  run-ml-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nbconvert
+
+      - name: Run preprocessing notebooks
+        run: |
+          jupyter nbconvert --to notebook --execute --inplace PREPROCESSING/demographic.ipynb --ExecutePreprocessor.timeout=600 --ExecutePreprocessor.cwd=PREPROCESSING
+          jupyter nbconvert --to notebook --execute --inplace PREPROCESSING/students.ipynb --ExecutePreprocessor.timeout=600 --ExecutePreprocessor.cwd=PREPROCESSING
+          jupyter nbconvert --to notebook --execute --inplace PREPROCESSING/subsidies.ipynb --ExecutePreprocessor.timeout=600 --ExecutePreprocessor.cwd=PREPROCESSING
+
+      - name: Run modeling notebooks
+        run: |
+          jupyter nbconvert --to notebook --execute --inplace MODEL/forecasting_demographic.ipynb --ExecutePreprocessor.timeout=900 --ExecutePreprocessor.cwd=MODEL
+          jupyter nbconvert --to notebook --execute --inplace MODEL/forecasting_students.ipynb --ExecutePreprocessor.timeout=900 --ExecutePreprocessor.cwd=MODEL
+          jupyter nbconvert --to notebook --execute --inplace MODEL/forecasting_subsidies.ipynb --ExecutePreprocessor.timeout=900 --ExecutePreprocessor.cwd=MODEL
+
+      - name: Validate outputs
+        run: python ci/validate_outputs.py
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ml-artifacts
+          path: |
+            data_clean/*.csv
+            TRANSFORMATION/*.csv
