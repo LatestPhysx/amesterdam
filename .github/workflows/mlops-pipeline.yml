@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  preprocessing:
-    name: Data Preprocessing
+  preprocess-demographic:
+    name: Preprocess Demographic Data
     runs-on: ubuntu-latest
 
     steps:
@@ -27,29 +27,83 @@ jobs:
           pip install -r requirements.txt
           pip install nbconvert
 
-      - name: Run demographic preprocessing
+      - name: Run preprocessing
         run: |
           jupyter nbconvert --to notebook --execute --inplace PREPROCESSING/demographic.ipynb --ExecutePreprocessor.timeout=600 --ExecutePreprocessor.cwd=PREPROCESSING
 
-      - name: Run students preprocessing
+      - name: Upload preprocessed data
+        uses: actions/upload-artifact@v4
+        with:
+          name: demographics-clean
+          path: data_clean/demographics.csv
+          retention-days: 1
+
+  preprocess-students:
+    name: Preprocess Student Data
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nbconvert
+
+      - name: Run preprocessing
         run: |
           jupyter nbconvert --to notebook --execute --inplace PREPROCESSING/students.ipynb --ExecutePreprocessor.timeout=600 --ExecutePreprocessor.cwd=PREPROCESSING
 
-      - name: Run subsidies preprocessing
+      - name: Upload preprocessed data
+        uses: actions/upload-artifact@v4
+        with:
+          name: students-clean
+          path: data_clean/students.csv
+          retention-days: 1
+
+  preprocess-subsidies:
+    name: Preprocess Subsidy Data
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nbconvert
+
+      - name: Run preprocessing
         run: |
           jupyter nbconvert --to notebook --execute --inplace PREPROCESSING/subsidies.ipynb --ExecutePreprocessor.timeout=600 --ExecutePreprocessor.cwd=PREPROCESSING
 
       - name: Upload preprocessed data
         uses: actions/upload-artifact@v4
         with:
-          name: preprocessed-data
-          path: data_clean/*.csv
+          name: subsidies-clean
+          path: data_clean/subsidies.csv
           retention-days: 1
 
-  modeling-demographic:
-    name: Forecast Demographics
+  train-demographic-model:
+    name: Train Demographic Model
     runs-on: ubuntu-latest
-    needs: preprocessing
+    needs: preprocess-demographic
 
     steps:
       - name: Checkout
@@ -70,24 +124,24 @@ jobs:
       - name: Download preprocessed data
         uses: actions/download-artifact@v4
         with:
-          name: preprocessed-data
+          name: demographics-clean
           path: data_clean
 
-      - name: Run demographic forecasting
+      - name: Run model training
         run: |
           jupyter nbconvert --to notebook --execute --inplace MODEL/forecasting_demographic.ipynb --ExecutePreprocessor.timeout=900 --ExecutePreprocessor.cwd=MODEL
 
-      - name: Upload demographic forecast
+      - name: Upload model predictions
         uses: actions/upload-artifact@v4
         with:
-          name: forecast-demographic
+          name: demographic-predictions
           path: TRANSFORMATION/forecast_demographic.csv
           retention-days: 1
 
-  modeling-students:
-    name: Forecast Students
+  train-student-model:
+    name: Train Student Model
     runs-on: ubuntu-latest
-    needs: preprocessing
+    needs: preprocess-students
 
     steps:
       - name: Checkout
@@ -108,10 +162,10 @@ jobs:
       - name: Download preprocessed data
         uses: actions/download-artifact@v4
         with:
-          name: preprocessed-data
+          name: students-clean
           path: data_clean
 
-      - name: Run students forecasting
+      - name: Run model training
         run: |
           jupyter nbconvert --to notebook --execute --inplace MODEL/forecasting_students.ipynb --ExecutePreprocessor.timeout=900 --ExecutePreprocessor.cwd=MODEL
 
@@ -170,50 +224,74 @@ jobs:
       - name: Install pandas
         run: pip install pandas
 
-      - name: Download preprocessed data
+      - name: Download demographics data
         uses: actions/download-artifact@v4
         with:
-          name: preprocessed-data
+          name: demographics-clean
           path: data_clean
 
-      - name: Download demographic forecast
+      - name: Download students data
         uses: actions/download-artifact@v4
         with:
-          name: forecast-demographic
+          name: students-clean
+          path: data_clean
+
+      - name: Download subsidies data
+        uses: actions/download-artifact@v4
+        with:
+          name: subsidies-clean
+          path: data_clean
+
+      - name: Download demographic predictions
+        uses: actions/download-artifact@v4
+        with:
+          name: demographic-predictions
           path: TRANSFORMATION
 
-      - name: Download subsidy forecast
+      - name: Download subsidy predictions
         uses: actions/download-artifact@v4
         with:
-          name: forecast-subsidies
+          name: subsidy-predictions
           path: TRANSFORMATION
 
       - name: Run validation
         run: python ci/validate_outputs.py
 
   publish-artifacts:
-    name: Publish ML Artifacts
+    name: Publish Pipeline Artifacts
     runs-on: ubuntu-latest
     needs: validate
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
-      - name: Download preprocessed data
+      - name: Download demographics data
         uses: actions/download-artifact@v4
         with:
-          name: preprocessed-data
+          name: demographics-clean
           path: data_clean
 
-      - name: Download demographic forecast
+      - name: Download students data
         uses: actions/download-artifact@v4
         with:
-          name: forecast-demographic
+          name: students-clean
+          path: data_clean
+
+      - name: Download subsidies data
+        uses: actions/download-artifact@v4
+        with:
+          name: subsidies-clean
+          path: data_clean
+
+      - name: Download demographic predictions
+        uses: actions/download-artifact@v4
+        with:
+          name: demographic-predictions
           path: TRANSFORMATION
 
-      - name: Download subsidy forecast
+      - name: Download subsidy predictions
         uses: actions/download-artifact@v4
         with:
-          name: forecast-subsidies
+          name: subsidy-predictions
           path: TRANSFORMATION
 
       - name: Upload final artifacts
